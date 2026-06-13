@@ -235,9 +235,9 @@ npx wscat -c ws://localhost:8000/ws/telemetry
 
 ## Environment variables
 
-| Variable        | Default                     | Description                               |
-| --------------- | --------------------------- | ----------------------------------------- |
-| `MONGO_URL`     | `mongodb://localhost:27017` | MongoDB connection string                 |
-| `DB_NAME`       | `cubesat_gs`                | Database name                             |
-| `SAT_IDS`       | `1,2,3,4,5`                 | Comma-separated satellite IDs to simulate |
+| Variable        | Default                     | Description                                       |
+| --------------- | --------------------------- | ------------------------------------------------- |
+| `MONGO_URL`     | `mongodb://localhost:27017` | MongoDB connection string                         |
+| `DB_NAME`       | `cubesat_gs`                | Database name                                     |
+| `SAT_IDS`       | `1,2,3,4,5`                 | Comma-separated satellite IDs to simulate         |
 | `FRAME_RATE_HZ` | `0.2`                       | Frames per second per satellite (0.2 = every 5 s) |
