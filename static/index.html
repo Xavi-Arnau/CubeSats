@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CubeSat Ground Station</title>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --surface: #161b22;
+        --border: #30363d;
+        --accent: #58a6ff;
+        --green: #3fb950;
+        --red: #f85149;
+        --yellow: #d29922;
+        --text: #c9d1d9;
+        --muted: #8b949e;
+        --card-w: 200px;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: "Segoe UI", system-ui, sans-serif;
+        font-size: 14px;
+        min-height: 100vh;
+      }
+
+      /* ── Header ─────────────────────────────────── */
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 24px;
+        border-bottom: 1px solid var(--border);
+        background: var(--surface);
+      }
+      header h1 {
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+      }
+      header h1 span {
+        color: var(--accent);
+      }
+
+      #ws-status {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      #ws-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: var(--muted);
+        transition: background 0.3s;
+      }
+      #ws-dot.connected {
+        background: var(--green);
+        box-shadow: 0 0 6px var(--green);
+      }
+      #ws-dot.offline {
+        background: var(--red);
+        box-shadow: 0 0 6px var(--red);
+      }
+
+      /* ── Main layout ─────────────────────────────── */
+      main {
+        display: grid;
+        grid-template-rows: auto 1fr;
+        gap: 0;
+        padding: 24px;
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      section {
+        margin-bottom: 28px;
+      }
+      section h2 {
+        font-size: 13px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: var(--muted);
+        margin-bottom: 14px;
+      }
+
+      /* ── Satellite cards ─────────────────────────── */
+      #sat-cards {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+
+      .sat-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 16px 20px;
+        width: var(--card-w);
+        transition: border-color 0.3s;
+      }
+      .sat-card.fresh {
+        border-color: var(--accent);
+      }
+
+      .sat-card .sat-title {
+        font-size: 15px;
+        font-weight: 700;
+        margin-bottom: 14px;
+        color: var(--accent);
+      }
+
+      .sat-card .metric {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+        font-size: 14px;
+      }
+      .sat-card .metric .icon {
+        font-size: 16px;
+        width: 20px;
+        text-align: center;
+      }
+      .sat-card .metric .val {
+        font-weight: 600;
+      }
+
+      .sat-card .last-seen {
+        margin-top: 12px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+
+      /* Battery bar */
+      .batt-bar-wrap {
+        background: var(--border);
+        border-radius: 4px;
+        height: 6px;
+        margin-top: 4px;
+        overflow: hidden;
+      }
+      .batt-bar {
+        height: 100%;
+        border-radius: 4px;
+        transition:
+          width 0.5s,
+          background 0.5s;
+      }
+
+      /* ── Bottom grid ─────────────────────────────── */
+      .bottom-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+      }
+
+      @media (max-width: 800px) {
+        .bottom-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      /* ── Live feed ───────────────────────────────── */
+      #live-feed {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+
+      #live-feed-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+      }
+
+      #live-count {
+        background: var(--accent);
+        color: #000;
+        border-radius: 10px;
+        padding: 1px 8px;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      #feed-rows {
+        max-height: 320px;
+        overflow-y: auto;
+      }
+
+      .feed-row {
+        display: grid;
+        grid-template-columns: 60px 70px 80px 70px 60px;
+        align-items: center;
+        padding: 7px 16px;
+        border-bottom: 1px solid var(--border);
+        font-size: 12px;
+        animation: fadeIn 0.3s ease;
+      }
+      .feed-row:last-child {
+        border-bottom: none;
+      }
+      .feed-row .sat-badge {
+        background: var(--accent);
+        color: #000;
+        border-radius: 4px;
+        padding: 1px 7px;
+        font-weight: 700;
+        font-size: 11px;
+        width: fit-content;
+      }
+      .feed-row .ts {
+        color: var(--muted);
+        font-size: 11px;
+      }
+      .feed-header-row {
+        display: grid;
+        grid-template-columns: 60px 70px 80px 70px 60px;
+        padding: 6px 16px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--muted);
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg);
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+          transform: translateY(-6px);
+        }
+        to {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      /* ── History panel ───────────────────────────── */
+      #history-panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+      }
+
+      #history-panel-header {
+        padding: 10px 16px;
+        border-bottom: 1px solid var(--border);
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+      }
+
+      .history-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--border);
+        align-items: flex-end;
+      }
+
+      .ctrl-group {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .ctrl-group label {
+        font-size: 11px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      select,
+      input[type="datetime-local"] {
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        color: var(--text);
+        padding: 6px 10px;
+        font-size: 13px;
+        outline: none;
+      }
+      select:focus,
+      input:focus {
+        border-color: var(--accent);
+      }
+
+      button {
+        background: var(--accent);
+        color: #000;
+        border: none;
+        border-radius: 6px;
+        padding: 7px 16px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: opacity 0.2s;
+        align-self: flex-end;
+      }
+      button:hover {
+        opacity: 0.85;
+      }
+      button:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+
+      #history-table-wrap {
+        max-height: 280px;
+        overflow-y: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 12px;
+      }
+      th {
+        position: sticky;
+        top: 0;
+        background: var(--bg);
+        padding: 7px 14px;
+        text-align: left;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--muted);
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--border);
+      }
+      td {
+        padding: 7px 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      tr:hover td {
+        background: rgba(88, 166, 255, 0.05);
+      }
+
+      .empty-msg {
+        padding: 24px;
+        text-align: center;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      /* ── Scrollbar ───────────────────────────────── */
+      ::-webkit-scrollbar {
+        width: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>🛰 <span>CubeSat</span> Ground Station</h1>
+      <div id="ws-status">
+        <div id="ws-dot"></div>
+        <span id="ws-label">Connecting…</span>
+      </div>
+    </header>
+
+    <main>
+      <!-- Satellite Cards -->
+      <section>
+        <h2>Satellites</h2>
+        <div id="sat-cards"></div>
+      </section>
+
+      <!-- Bottom grid: live feed + history -->
+      <div class="bottom-grid">
+        <!-- Live Feed -->
+        <div id="live-feed">
+          <div id="live-feed-header">
+            Live Feed
+            <span id="live-count">0</span>
+          </div>
+          <div class="feed-header-row">
+            <span>Sat</span>
+            <span>Temp</span>
+            <span>Voltage</span>
+            <span>Battery</span>
+            <span>Time</span>
+          </div>
+          <div id="feed-rows">
+            <p class="empty-msg">Waiting for telemetry…</p>
+          </div>
+        </div>
+
+        <!-- History -->
+        <div id="history-panel">
+          <div id="history-panel-header">History Query</div>
+          <div class="history-controls">
+            <div class="ctrl-group">
+              <label>Satellite</label>
+              <select id="hist-sat"></select>
+            </div>
+            <div class="ctrl-group">
+              <label>Since</label>
+              <input type="datetime-local" id="hist-since" />
+            </div>
+            <button id="hist-btn">Fetch</button>
+          </div>
+          <div id="history-table-wrap">
+            <p class="empty-msg">
+              Select a satellite and time range, then click Fetch.
+            </p>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      // ── Config ────────────────────────────────────────
+      const API = `${location.protocol}//${location.host}`;
+      const WS_URL = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws/telemetry`;
+      const MAX_FEED_ROWS = 50;
+
+      // ── State ─────────────────────────────────────────
+      const satState = {}; // { [satId]: { temperature_c, voltage_v, battery_pct, timestamp } }
+      let totalFrames = 0;
+      let ws = null;
+      let reconnectTimer = null;
+
+      // ── Init: fetch satellite list, build cards ────────
+      async function init() {
+        const resp = await fetch(`${API}/satellites`);
+        const data = await resp.json();
+        const ids = data.satellite_ids;
+
+        buildCards(ids);
+        buildHistSelect(ids);
+        setDefaultSince();
+        connectWS();
+      }
+
+      // ── Satellite cards ───────────────────────────────
+      function buildCards(ids) {
+        const container = document.getElementById("sat-cards");
+        ids.forEach((id) => {
+          satState[id] = null;
+          const card = document.createElement("div");
+          card.className = "sat-card";
+          card.id = `card-${id}`;
+          card.innerHTML = `
+        <div class="sat-title">SAT-${id}</div>
+        <div class="metric"><span class="icon">🌡</span><span class="val" id="temp-${id}">—</span></div>
+        <div class="metric"><span class="icon">⚡</span><span class="val" id="volt-${id}">—</span></div>
+        <div class="metric">
+          <span class="icon">🔋</span>
+          <div style="flex:1">
+            <span class="val" id="batt-${id}">—</span>
+            <div class="batt-bar-wrap">
+              <div class="batt-bar" id="battbar-${id}" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="last-seen" id="seen-${id}">No data yet</div>
+      `;
+          container.appendChild(card);
+        });
+      }
+
+      function updateCard(frame) {
+        const {
+          satellite_id: id,
+          temperature_c,
+          voltage_v,
+          battery_pct,
+          timestamp,
+        } = frame;
+        if (!document.getElementById(`card-${id}`)) return;
+
+        document.getElementById(`temp-${id}`).textContent =
+          `${temperature_c.toFixed(1)} °C`;
+        document.getElementById(`volt-${id}`).textContent =
+          `${voltage_v.toFixed(3)} V`;
+        document.getElementById(`batt-${id}`).textContent = `${battery_pct} %`;
+
+        const bar = document.getElementById(`battbar-${id}`);
+        bar.style.width = `${battery_pct}%`;
+        bar.style.background =
+          battery_pct > 50
+            ? "#3fb950"
+            : battery_pct > 20
+              ? "#d29922"
+              : "#f85149";
+
+        const ts = timestamp ? new Date(timestamp) : new Date();
+        document.getElementById(`seen-${id}`).textContent =
+          `Last seen: ${ts.toLocaleTimeString()}`;
+
+        // Flash border
+        const card = document.getElementById(`card-${id}`);
+        card.classList.add("fresh");
+        setTimeout(() => card.classList.remove("fresh"), 800);
+      }
+
+      // ── Live feed ─────────────────────────────────────
+      function prependFeedRow(frame) {
+        const wrap = document.getElementById("feed-rows");
+
+        // Remove placeholder
+        const placeholder = wrap.querySelector(".empty-msg");
+        if (placeholder) placeholder.remove();
+
+        const ts = frame.timestamp ? new Date(frame.timestamp) : new Date();
+        const row = document.createElement("div");
+        row.className = "feed-row";
+        row.innerHTML = `
+      <span><span class="sat-badge">${frame.satellite_id}</span></span>
+      <span>${frame.temperature_c.toFixed(1)} °C</span>
+      <span>${frame.voltage_v.toFixed(3)} V</span>
+      <span>${frame.battery_pct} %</span>
+      <span class="ts">${ts.toLocaleTimeString()}</span>
+    `;
+        wrap.insertBefore(row, wrap.firstChild);
+
+        // Keep at most MAX_FEED_ROWS rows
+        while (wrap.children.length > MAX_FEED_ROWS) {
+          wrap.removeChild(wrap.lastChild);
+        }
+
+        totalFrames++;
+        document.getElementById("live-count").textContent = totalFrames;
+      }
+
+      // ── WebSocket ─────────────────────────────────────
+      function setWsStatus(status) {
+        const dot = document.getElementById("ws-dot");
+        const label = document.getElementById("ws-label");
+        dot.className = status;
+        label.textContent =
+          status === "connected"
+            ? "Connected"
+            : status === "offline"
+              ? "Disconnected — retrying…"
+              : "Connecting…";
+      }
+
+      function connectWS() {
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+        setWsStatus("");
+
+        ws = new WebSocket(WS_URL);
+
+        ws.onopen = () => {
+          setWsStatus("connected");
+        };
+
+        ws.onmessage = (event) => {
+          const frame = JSON.parse(event.data);
+          updateCard(frame);
+          prependFeedRow(frame);
+        };
+
+        ws.onclose = () => {
+          setWsStatus("offline");
+          reconnectTimer = setTimeout(connectWS, 3000);
+        };
+
+        ws.onerror = () => {
+          ws.close();
+        };
+      }
+
+      // ── History panel ─────────────────────────────────
+      function buildHistSelect(ids) {
+        const sel = document.getElementById("hist-sat");
+        ids.forEach((id) => {
+          const opt = document.createElement("option");
+          opt.value = id;
+          opt.textContent = `SAT-${id}`;
+          sel.appendChild(opt);
+        });
+      }
+
+      function setDefaultSince() {
+        // Default: 30 minutes ago (local time, for the datetime-local input)
+        const d = new Date(Date.now() - 30 * 60 * 1000);
+        const pad = (n) => String(n).padStart(2, "0");
+        document.getElementById("hist-since").value =
+          `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      }
+
+      document
+        .getElementById("hist-btn")
+        .addEventListener("click", fetchHistory);
+
+      async function fetchHistory() {
+        const satId = document.getElementById("hist-sat").value;
+        const since = document.getElementById("hist-since").value;
+        if (!satId || !since) return;
+
+        const btn = document.getElementById("hist-btn");
+        btn.disabled = true;
+        btn.textContent = "Loading…";
+
+        try {
+          // datetime-local gives local time — convert to UTC to match MongoDB
+          const sinceUTC = new Date(since).toISOString();
+          const url = `${API}/telemetry?satellite_id=${satId}&since=${sinceUTC}`;
+          const resp = await fetch(url);
+          if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+          const data = await resp.json();
+          renderHistoryTable(data.records);
+        } catch (err) {
+          renderHistoryError(err.message);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Fetch";
+        }
+      }
+
+      function renderHistoryTable(records) {
+        const wrap = document.getElementById("history-table-wrap");
+        if (!records || records.length === 0) {
+          wrap.innerHTML =
+            '<p class="empty-msg">No records found for this range.</p>';
+          return;
+        }
+
+        const rows = records
+          .map((r) => {
+            const ts = new Date(r.timestamp).toLocaleString();
+            const batt_color =
+              r.battery_pct > 50
+                ? "#3fb950"
+                : r.battery_pct > 20
+                  ? "#d29922"
+                  : "#f85149";
+            return `<tr>
+        <td>${ts}</td>
+        <td>${r.temperature_c.toFixed(1)} °C</td>
+        <td>${r.voltage_v.toFixed(3)} V</td>
+        <td style="color:${batt_color}">${r.battery_pct} %</td>
+      </tr>`;
+          })
+          .join("");
+
+        wrap.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th>Timestamp</th>
+            <th>Temperature</th>
+            <th>Voltage</th>
+            <th>Battery</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p class="empty-msg" style="padding:8px 16px;text-align:left;font-size:11px;">
+        ${records.length} record(s) shown (newest first)
+      </p>
+    `;
+      }
+
+      function renderHistoryError(msg) {
+        document.getElementById("history-table-wrap").innerHTML =
+          `<p class="empty-msg" style="color:#f85149">Error: ${msg}</p>`;
+      }
+
+      // ── Boot ──────────────────────────────────────────
+      init();
+    </script>
+  </body>
+</html>

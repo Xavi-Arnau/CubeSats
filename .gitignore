@@ -1,0 +1,23 @@
+﻿# Python virtual environment
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environment variable files
+.env
+.env.*
+
+# Docker volumes / local data
+mongo_data/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,41 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: cubesat_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: cubesat_gs
+
+  mongo-express:
+    image: mongo-express:1
+    container_name: cubesat_mongo_express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_SERVER: mongo
+      ME_CONFIG_MONGODB_PORT: 27017
+      ME_CONFIG_BASICAUTH: "false"
+    depends_on:
+      - mongo
+
+  app:
+    build: .
+    container_name: cubesat_app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      MONGO_URL: mongodb://mongo:27017
+      DB_NAME: cubesat_gs
+      SAT_IDS: "1,2,3,4,5"
+      FRAME_RATE_HZ: "0.2"
+    depends_on:
+      - mongo
+
+volumes:
+  mongo_data:
