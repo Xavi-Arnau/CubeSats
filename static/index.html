@@ -83,6 +83,12 @@
         margin: 0 auto;
       }
 
+      @media (max-width: 600px) {
+        main {
+          padding: 12px;
+        }
+      }
+
       section {
         margin-bottom: 28px;
       }
@@ -97,9 +103,8 @@
 
       /* ── Satellite cards ─────────────────────────── */
       #sat-cards {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 16px;
+        display: grid;
+        gap: 10px;
       }
 
       .sat-card {
@@ -107,8 +112,53 @@
         border: 1px solid var(--border);
         border-radius: 10px;
         padding: 16px 20px;
-        width: var(--card-w);
+        width: 100%;
         transition: border-color 0.3s;
+      }
+
+      /* Mobile: 2 columns, compact */
+      @media (max-width: 600px) {
+        #sat-cards {
+          grid-template-columns: repeat(2, 1fr);
+          gap: 10px;
+        }
+        .sat-card {
+          padding: 12px 14px;
+        }
+        .sat-card .sat-title {
+          font-size: 13px;
+          margin-bottom: 10px;
+        }
+        .sat-card .metric {
+          font-size: 12px;
+          gap: 6px;
+          margin-bottom: 6px;
+        }
+        .sat-card .metric .icon {
+          font-size: 13px;
+          width: 16px;
+        }
+        .sat-card .last-seen {
+          font-size: 10px;
+          margin-top: 8px;
+        }
+        .bottom-grid {
+          gap: 12px;
+        }
+      }
+
+      /* Tablet: 3 columns */
+      @media (min-width: 601px) and (max-width: 1024px) {
+        #sat-cards {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+
+      /* Desktop: 5 columns (all satellites in one row) */
+      @media (min-width: 1025px) {
+        #sat-cards {
+          grid-template-columns: repeat(5, 1fr);
+        }
       }
       .sat-card.fresh {
         border-color: var(--accent);
