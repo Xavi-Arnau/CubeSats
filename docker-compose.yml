@@ -34,6 +34,7 @@ services:
       DB_NAME: cubesat_gs
       SAT_IDS: "1,2,3,4,5"
       FRAME_RATE_HZ: "0.2"
+      WORKER_THREADS: "3"
     depends_on:
       - mongo
 

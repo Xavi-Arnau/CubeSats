@@ -2,16 +2,19 @@
 Pipeline — wires Acquisition, Processing, Persistence, and Visualization.
 
 Threading model:
-  Thread 1  SimulatorThread  (Acquisition)   — puts raw bytes into queue.Queue
-  Thread 2  ConsumerThread   (Processing + Persistence)
-                              — drains queue, parses TelemetryFrame,
-                                saves to MongoDB, broadcasts via WebSocket
-  Main      FastAPI/uvicorn  (Visualization) — async event loop
+  Thread 1      SimulatorThread  (Acquisition)  — puts raw bytes into queue.Queue
+  Threads 2..N  WorkerThread pool (Processing + Persistence)
+                — N workers all drain the same queue.Queue concurrently;
+                  each worker independently parses TelemetryFrame,
+                  saves to MongoDB, and broadcasts via WebSocket.
+                  queue.Queue is thread-safe so no extra locking is needed.
+  Main          FastAPI/uvicorn  (Visualization) — async event loop
 
-The bridge between the sync ConsumerThread and the async WebSocket broadcast
+The bridge between sync WorkerThreads and the async WebSocket broadcast
 is `asyncio.run_coroutine_threadsafe(manager.broadcast(data), loop)`.
 This is the canonical, thread-safe way to schedule a coroutine onto a
-running event loop from outside that loop.
+running event loop from outside that loop. It is safe to call from
+multiple worker threads simultaneously.
 """
 from __future__ import annotations
 
@@ -31,23 +34,26 @@ logger = logging.getLogger(__name__)
 QUEUE_MAX_SIZE = 1000
 
 
-class ConsumerThread(threading.Thread):
+class WorkerThread(threading.Thread):
     """
-    Processing + Persistence module.
+    Processing + Persistence worker.
 
-    Reads raw bytes from the shared queue, parses them into TelemetryFrame
-    objects, persists valid frames to MongoDB, and broadcasts them to all
-    connected WebSocket clients.
+    One of N workers that concurrently drain the shared queue. Each worker
+    independently parses raw bytes into TelemetryFrame objects, persists
+    valid frames to MongoDB, and broadcasts them to all connected WebSocket
+    clients. queue.Queue is thread-safe so multiple workers share it safely.
     """
 
     def __init__(
         self,
+        worker_id: int,
         raw_queue: queue.Queue,
         repo: TelemetryRepository,
         manager: ConnectionManager,
         loop: asyncio.AbstractEventLoop,
     ) -> None:
-        super().__init__(name="ConsumerThread", daemon=True)
+        super().__init__(name=f"WorkerThread-{worker_id}", daemon=True)
+        self._worker_id = worker_id
         self._queue = raw_queue
         self._repo = repo
         self._manager = manager
@@ -55,7 +61,7 @@ class ConsumerThread(threading.Thread):
         self._stop_event = threading.Event()
 
     def run(self) -> None:
-        logger.info("[Pipeline] ConsumerThread started")
+        logger.info("[Pipeline] %s started", self.name)
         while not self._stop_event.is_set():
             try:
                 raw = self._queue.get(timeout=0.5)
@@ -101,7 +107,7 @@ class ConsumerThread(threading.Thread):
 
     def stop(self) -> None:
         self._stop_event.set()
-        logger.info("[Pipeline] ConsumerThread stop requested")
+        logger.info("[Pipeline] %s stop requested", self.name)
 
 
 # ------------------------------------------------------------------ #
@@ -109,7 +115,7 @@ class ConsumerThread(threading.Thread):
 # ------------------------------------------------------------------ #
 
 _simulator: SimulatorThread | None = None
-_consumer: ConsumerThread | None = None
+_workers: list[WorkerThread] = []
 _repo: TelemetryRepository | None = None
 
 
@@ -118,7 +124,7 @@ def start(settings: Settings, manager: ConnectionManager) -> TelemetryRepository
     Start all pipeline threads.  Called from the FastAPI lifespan startup hook.
     Returns the repository so it can be injected into the route layer.
     """
-    global _simulator, _consumer, _repo
+    global _simulator, _workers, _repo
 
     loop = asyncio.get_event_loop()
     raw_queue: queue.Queue = queue.Queue(maxsize=QUEUE_MAX_SIZE)
@@ -126,22 +132,29 @@ def start(settings: Settings, manager: ConnectionManager) -> TelemetryRepository
     _repo = TelemetryRepository(settings.mongo_url, settings.db_name)
 
     _simulator = SimulatorThread(raw_queue, settings.sat_ids, settings.frame_rate_hz)
-    _consumer = ConsumerThread(raw_queue, _repo, manager, loop)
+    _workers = [
+        WorkerThread(i, raw_queue, _repo, manager, loop)
+        for i in range(settings.num_workers)
+    ]
 
     _simulator.start()
-    _consumer.start()
+    for worker in _workers:
+        worker.start()
 
-    logger.info("[Pipeline] Started — satellites=%s @ %.1f Hz", settings.sat_ids, settings.frame_rate_hz)
+    logger.info(
+        "[Pipeline] Started — satellites=%s @ %.1f Hz, workers=%d",
+        settings.sat_ids, settings.frame_rate_hz, settings.num_workers,
+    )
     return _repo
 
 
 def stop() -> None:
-    """Graceful shutdown — request threads to stop (they are daemons so the
-    process will exit even if they don't finish promptly)."""
+    """Graceful shutdown — request all threads to stop (they are daemons so
+    the process will exit even if they don't finish promptly)."""
     if _simulator:
         _simulator.stop()
-    if _consumer:
-        _consumer.stop()
+    for worker in _workers:
+        worker.stop()
     if _repo:
         _repo.close()
     logger.info("[Pipeline] Stopped")

@@ -15,14 +15,16 @@ Built as a hands-on implementation of a software architecture exercise covering:
 
 ```
 +----------------------+        +--------------------------------+
-|  SimulatorThread     |        |  ConsumerThread                |
-|  (Acquisition)       |------> |  (Processing + Persistence)    |
-|                      | queue  |                                |
-|  Mimics RS-232 port  | .Queue |  Parses TelemetryFrame         |
-|  @ 1 Hz per sat      |        |  Validates XOR checksum        |
-|  5 satellites        |        |  Saves to MongoDB              |
-|  ~5% corrupt frames  |        |  Broadcasts via WebSocket      |
-+----------------------+        +--------------------------------+
+|  SimulatorThread     |        |  WorkerThread-0                |
+|  (Acquisition)       |------> |  WorkerThread-1                |
+|                      | queue  |  WorkerThread-2  (N workers)   |
+|  Mimics RS-232 port  | .Queue |                                |
+|  @ 0.2 Hz per sat   |        |  Each worker independently:    |
+|  5 satellites        |        |  · Parses TelemetryFrame       |
+|  ~5% corrupt frames  |        |  · Validates XOR checksum      |
++----------------------+        |  · Saves to MongoDB            |
+                                |  · Broadcasts via WebSocket    |
+                                +--------------------------------+
                                           |
                               +-----------v-----------+
                               |  FastAPI (main thread) |
@@ -36,7 +38,7 @@ Built as a hands-on implementation of a software architecture exercise covering:
                               +------------------------+
 ```
 
-**Design pattern:** Producer-Consumer via `queue.Queue` — the only thread-safe bridge between the acquisition thread and the consumer thread. The consumer bridges to the async WebSocket broadcast via `asyncio.run_coroutine_threadsafe()`.
+**Design pattern:** Producer-Consumer via `queue.Queue` — the only thread-safe bridge between the single acquisition thread and the worker pool. All N workers drain the same queue concurrently; `queue.Queue` handles thread safety internally. Each worker bridges to the async WebSocket broadcast via `asyncio.run_coroutine_threadsafe()`.
 
 ---
 
@@ -235,9 +237,10 @@ npx wscat -c ws://localhost:8000/ws/telemetry
 
 ## Environment variables
 
-| Variable        | Default                     | Description                                       |
-| --------------- | --------------------------- | ------------------------------------------------- |
-| `MONGO_URL`     | `mongodb://localhost:27017` | MongoDB connection string                         |
-| `DB_NAME`       | `cubesat_gs`                | Database name                                     |
-| `SAT_IDS`       | `1,2,3,4,5`                 | Comma-separated satellite IDs to simulate         |
-| `FRAME_RATE_HZ` | `0.2`                       | Frames per second per satellite (0.2 = every 5 s) |
+| Variable         | Default                     | Description                                       |
+| ---------------- | --------------------------- | ------------------------------------------------- |
+| `MONGO_URL`      | `mongodb://localhost:27017` | MongoDB connection string                         |
+| `DB_NAME`        | `cubesat_gs`                | Database name                                     |
+| `SAT_IDS`        | `1,2,3,4,5`                 | Comma-separated satellite IDs to simulate         |
+| `FRAME_RATE_HZ`  | `0.2`                       | Frames per second per satellite (0.2 = every 5 s) |
+| `WORKER_THREADS` | `3`                         | Number of concurrent consumer worker threads      |

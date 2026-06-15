@@ -10,6 +10,7 @@ class Settings:
     db_name: str
     sat_ids: list[int]
     frame_rate_hz: float
+    num_workers: int
 
 
 def get_settings() -> Settings:
@@ -25,4 +26,5 @@ def get_settings() -> Settings:
         db_name=os.getenv("DB_NAME", "cubesat_gs"),
         sat_ids=[int(s.strip()) for s in sat_ids_raw.split(",") if s.strip()],
         frame_rate_hz=float(os.getenv("FRAME_RATE_HZ", "0.2")),
+        num_workers=int(os.getenv("WORKER_THREADS", "3")),
     )
